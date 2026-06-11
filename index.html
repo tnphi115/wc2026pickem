@@ -999,6 +999,7 @@ async function loadST(){
         ST=normST(cloud);
         try{localStorage.setItem('wc26v5',JSON.stringify(ST));}catch(e){}
         startPoll();
+        startScoreSync();
         return;
       }
     }
@@ -1348,6 +1349,7 @@ function enter(u,adm){
 }
 function logout(){
   CU=null;ADMIN=false;pending={};pendScores={};hideSave();stopPoll();
+  stopScoreSync();
   document.getElementById('app').classList.remove('show');
   document.getElementById('landing').classList.add('show');
 }
@@ -2091,7 +2093,44 @@ function toast(msg){
   el.textContent=msg;el.classList.add('on');
   setTimeout(()=>el.classList.remove('on'),2500);
 }
+// ─── AUTO SCORE SYNC ─────────────────────────────────────────────────
+let _scoreSyncTimer = null;
 
+async function syncScores() {
+  try {
+    const r = await fetch('/.netlify/functions/scores');
+    if (!r.ok) return;
+    const data = await r.json();
+    if (data.updated) {
+      // Fresh data came in — pull latest state from JSONbin
+      const cloud = await fetchCloud();
+      if (cloud) {
+        ST = normST(cloud);
+        try { localStorage.setItem('wc26v5', JSON.stringify(ST)); } catch (e) {}
+        updPts();
+        awardBadges();
+        // Refresh whichever tab is currently active
+        const active = ['lb','ru','st','gs','ko','tb','ad'].find(t =>
+          document.getElementById('p-' + t)?.classList.contains('on'));
+        if (active) go(active);
+        toast('📊 Scores updated!');
+      }
+    }
+  } catch (e) {
+    // Silently fail — manual admin entry still works as fallback
+  }
+}
+
+function startScoreSync() {
+  syncScores(); // Run immediately on login
+  clearInterval(_scoreSyncTimer);
+  // Then every 60 seconds
+  _scoreSyncTimer = setInterval(syncScores, 60000);
+}
+
+function stopScoreSync() {
+  clearInterval(_scoreSyncTimer);
+}
 // ─── INIT ────────────────────────────────────────────────────────────
 (async()=>{
   try{
